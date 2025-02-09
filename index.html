@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strings File Converter (with Sections)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        textarea {
+            width: 100%;
+            min-height: 200px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .column {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        select, button {
+            margin: 5px;
+            padding: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .mode-select {
+            margin-bottom: 20px;
+        }
+        .info {
+            background: #e8f5e9;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .error {
+            color: red;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h2>Strings File Converter (with Sections)</h2>
+    
+    <div class="info">
+        <strong>格式說明：</strong><br>
+        CSV格式：section,key,value （第一行為標題）<br>
+        例如：<br>
+        section,key,value<br>
+        登入頁面,login_title,登入<br>
+        登入頁面,login_button,確定<br>
+        主頁面,home_title,主頁<br>
+    </div>
+
+    <div class="mode-select">
+        <label>轉換模式：</label>
+        <select id="convertMode" onchange="switchMode()">
+            <option value="toCSV">XML/Strings 轉 CSV</option>
+            <option value="fromCSV">CSV 轉 XML/Strings</option>
+        </select>
+        <select id="fileType">
+            <option value="android">Android XML</option>
+            <option value="ios">iOS Strings</option>
+        </select>
+    </div>
+
+    <div class="container">
+        <div class="column">
+            <h3 id="inputTitle">輸入 XML/Strings</h3>
+            <textarea id="input" placeholder="請輸入內容..."></textarea>
+            <div id="csvControls" style="display: none;">
+                <label>Section 列：</label>
+                <select id="sectionColumn"></select>
+                <label>Key 列：</label>
+                <select id="keyColumn"></select>
+                <label>Value 列：</label>
+                <select id="valueColumn"></select>
+            </div>
+            <div id="errorMsg" class="error"></div>
+            <button onclick="convert()">轉換</button>
+        </div>
+        <div class="column">
+            <h3 id="outputTitle">輸出 CSV</h3>
+            <textarea id="output" readonly></textarea>
+            <button onclick="copyToClipboard()">複製到剪貼板</button>
+        </div>
+    </div>
+
+    <script>
+        function switchMode() {
+            const mode = document.getElementById('convertMode').value;
+            const inputTitle = document.getElementById('inputTitle');
+            const outputTitle = document.getElementById('outputTitle');
+            const csvControls = document.getElementById('csvControls');
+            const fileType = document.getElementById('fileType').value;
+            const input = document.getElementById('input');
+            const output = document.getElementById('output');
+
+            document.getElementById('errorMsg').textContent = '';
+            
+            if (mode === 'toCSV') {
+                inputTitle.textContent = `輸入 ${fileType === 'android' ? 'XML' : 'Strings'}`;
+                outputTitle.textContent = '輸出 CSV';
+                csvControls.style.display = 'none';
+                input.placeholder = fileType === 'android' ? 
+                    '請輸入 Android XML 內容...' : 
+                    '請輸入 iOS Strings 內容...';
+            } else {
+                inputTitle.textContent = '輸入 CSV';
+                outputTitle.textContent = `輸出 ${fileType === 'android' ? 'XML' : 'Strings'}`;
+                csvControls.style.display = 'block';
+                input.placeholder = '請輸入 CSV 內容... (格式: section,key,value)';
+            }
+            
+            input.value = '';
+            output.value = '';
+            
+            if (mode === 'fromCSV') {
+                updateColumnSelects();
+            }
+        }
+
+        function updateColumnSelects() {
+            const csvContent = document.getElementById('input').value;
+            const errorMsg = document.getElementById('errorMsg');
+            
+            if (!csvContent) {
+                errorMsg.textContent = '請先輸入 CSV 內容';
+                return;
+            }
+            
+            const lines = csvContent.split('\n');
+            if (lines.length === 0) {
+                errorMsg.textContent = 'CSV 內容不能為空';
+                return;
+            }
+
+            const headers = lines[0].split(',').map(h => h.trim());
+            if (headers.length < 3) {
+                errorMsg.textContent = 'CSV 必須包含至少三列 (section, key, value)';
+                return;
+            }
+
+            const sectionSelect = document.getElementById('sectionColumn');
+            const keySelect = document.getElementById('keyColumn');
+            const valueSelect = document.getElementById('valueColumn');
+            
+            // 清空現有選項
+            sectionSelect.innerHTML = '';
+            keySelect.innerHTML = '';
+            valueSelect.innerHTML = '';
+            
+            // 添加新選項
+            headers.forEach((header, index) => {
+                const option = new Option(header, index);
+                sectionSelect.add(option.cloneNode(true));
+                keySelect.add(option.cloneNode(true));
+                valueSelect.add(option.cloneNode(true));
+            });
+            
+            // 智能預設值選擇
+            headers.forEach((header, index) => {
+                const headerLower = header.toLowerCase();
+                if (headerLower.includes('section')) {
+                    sectionSelect.value = index;
+                }
+                if (headerLower.includes('key')) {
+                    keySelect.value = index;
+                }
+                if (headerLower.includes('value') || headerLower.includes('translation')) {
+                    valueSelect.value = index;
+                }
+            });
+            
+            errorMsg.textContent = '';
+        }
+
+        function xml2csv(xml) {
+            try {
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xml, 'text/xml');
+                
+                if (xmlDoc.getElementsByTagName('parsererror').length > 0) {
+                    throw new Error('無效的 XML 格式');
+                }
+
+                let csv = 'section,key,value\n';
+                let currentSection = '';
+                
+                const walker = document.createTreeWalker(
+                    xmlDoc,
+                    NodeFilter.SHOW_COMMENT | NodeFilter.SHOW_ELEMENT
+                );
+
+                let node;
+                while ((node = walker.nextNode())) {
+                    if (node.nodeType === Node.COMMENT_NODE) {
+                        currentSection = node.textContent.trim();
+                    } else if (node.nodeName === 'string') {
+                        const key = node.getAttribute('name');
+                        const value = node.textContent;
+                        csv += `${currentSection},${key},${value}\n`;
+                    }
+                }
+                return csv;
+            } catch (e) {
+                throw new Error('XML 解析錯誤: ' + e.message);
+            }
+        }
+
+        function strings2csv(stringsContent) {
+            const lines = stringsContent.split('\n');
+            let csv = 'section,key,value\n';
+            let currentSection = '';
+            
+            for (let line of lines) {
+                line = line.trim();
+                if (line) {
+                    if (line.startsWith('/*') && line.endsWith('*/')) {
+                        currentSection = line.slice(2, -2).trim();
+                    } else if (line.startsWith('//')) {
+                        currentSection = line.slice(2).trim();
+                    } else {
+                        const match = line.match(/"([^"]+)"\s*=\s*"([^"]+)";/);
+                        if (match) {
+                            csv += `${currentSection},${match[1]},${match[2]}\n`;
+                        }
+                    }
+                }
+            }
+            return csv;
+        }
+
+        function csv2xml(csv) {
+            const lines = csv.split('\n');
+            if (lines.length < 2) {
+                throw new Error('CSV 必須包含標題行和至少一行數據');
+            }
+
+            const headers = lines[0].split(',').map(h => h.trim());
+            const sectionIndex = parseInt(document.getElementById('sectionColumn').value);
+            const keyIndex = parseInt(document.getElementById('keyColumn').value);
+            const valueIndex = parseInt(document.getElementById('valueColumn').value);
+
+            let xml = '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n';
+            let currentSection = '';
+            
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (line) {
+                    const values = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/); // 處理包含逗號的值
+                    if (values.length < Math.max(sectionIndex, keyIndex, valueIndex) + 1) {
+                        throw new Error(`第 ${i+1} 行數據列數不足`);
+                    }
+
+                    const section = values[sectionIndex].replace(/^"(.*)"$/, '$1').trim();
+                    const key = values[keyIndex].replace(/^"(.*)"$/, '$1').trim();
+                    const value = values[valueIndex].replace(/^"(.*)"$/, '$1').trim();
+
+                    if (!key || !value) {
+                        throw new Error(`第 ${i+1} 行缺少 key 或 value`);
+                    }
+
+                    if (section !== currentSection) {
+                        xml += `\n    <!-- ${section} -->\n`;
+                        currentSection = section;
+                    }
+                    xml += `    <string name="${key}">${value}</string>\n`;
+                }
+            }
+            
+            xml += '</resources>';
+            return xml;
+        }
+
+        function csv2strings(csv) {
+            const lines = csv.split('\n');
+            if (lines.length < 2) {
+                throw new Error('CSV 必須包含標題行和至少一行數據');
+            }
+
+            const headers = lines[0].split(',').map(h => h.trim());
+            const sectionIndex = parseInt(document.getElementById('sectionColumn').value);
+            const keyIndex = parseInt(document.getElementById('keyColumn').value);
+            const valueIndex = parseInt(document.getElementById('valueColumn').value);
+
+            let strings = '';
+            let currentSection = '';
+            
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (line) {
+                    const values = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+                    if (values.length < Math.max(sectionIndex, keyIndex, valueIndex) + 1) {
+                        throw new Error(`第 ${i+1} 行數據列數不足`);
+                    }
+
+                    const section = values[sectionIndex].replace(/^"(.*)"$/, '$1').trim();
+                    const key = values[keyIndex].replace(/^"(.*)"$/, '$1').trim();
+                    const value = values[valueIndex].replace(/^"(.*)"$/, '$1').trim();
+
+                    if (!key || !value) {
+                        throw new Error(`第 ${i+1} 行缺少 key 或 value`);
+                    }
+
+                    if (section !== currentSection) {
+                        strings += `\n/* ${section} */\n`;
+                        currentSection = section;
+                    }
+                    strings += `"${key}" = "${value}";\n`;
+                }
+            }
+            return strings;
+        }
+
+        function convert() {
+            const mode = document.getElementById('convertMode').value;
+            const fileType = document.getElementById('fileType').value;
+            const input = document.getElementById('input').value.trim();
+            const errorMsg = document.getElementById('errorMsg');
+            
+            errorMsg.textContent = '';
+            document.getElementById('output').value = '';
+
+            try {
+                if (!input) throw new Error('請輸入內容');
+
+                let output = '';
+                if (mode === 'toCSV') {
+                    output = fileType === 'android' ? xml2csv(input) : strings2csv(input);
+                } else {
+                    if (fileType === 'android') {
+                        output = csv2xml(input);
+                    } else {
+                        output = csv2strings(input);
+                    }
+                }
+                document.getElementById('output').value = output;
+            } catch (error) {
+                errorMsg.textContent = '錯誤: ' + error.message;
+            }
+        }
+
+        function copyToClipboard() {
+            const output = document.getElementById('output');
+            output.select();
+            document.execCommand('copy');
+            alert('已複製到剪貼板！');
+        }
+
+        // 初始化事件監聽
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('input').addEventListener('input', function() {
+                if (document.getElementById('convertMode').value === 'fromCSV') {
+                    updateColumnSelects();
+                }
+            });
+            
+            document.getElementById('fileType').addEventListener('change', switchMode);
+            document.getElementById('convertMode').addEventListener('change', switchMode);
+            
+            // 初始界面設置
+            switchMode();
+        });
+    </script>
+</body>
+</html>
